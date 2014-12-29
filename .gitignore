@@ -1,6 +1,7 @@
 # Local
 .idea/
 .DS_Store
+.env
 wkg/
 
 # Logs

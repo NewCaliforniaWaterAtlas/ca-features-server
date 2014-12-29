@@ -12,7 +12,7 @@ router.get('/', function(req, res) {
 
 function getHucs(hucs, res, query) {
   console.log(query);
-  var conString = "pg://erictheise:esiehtcire@localhost/ca_features";
+  var conString = 'pg://' + process.env.DB_USER + ':' + process.env.DB_PASS + '@localhost/ca_features';
   var client = new pg.Client(conString);
   client.connect();
 
@@ -74,7 +74,7 @@ function getHucs(hucs, res, query) {
       fc.features.push(f);
     });
 
-    res.setHeader("Access-Control-Allow-Origin", "*")
+    res.setHeader("Access-Control-Allow-Origin", "*");
     res.type('application/json');
     res.send(fc);
   });
