@@ -12,9 +12,6 @@ router.get('/', function(req, res) {
 
 function getHucs(hucs, res, query) {
   console.log(query);
-  var conString = 'pg://' + process.env.DB_USER + ':' + process.env.DB_PASS + '@localhost/ca_features';
-  var client = new pg.Client(conString);
-  client.connect();
 
   // Validations.
   // precision is the number of decimal places requested in the geometry: integer [0, 15].
@@ -40,43 +37,61 @@ function getHucs(hucs, res, query) {
     "features": []
   };
 
-  var sql;
-  if (query.tolerance === undefined) {
-    console.log('no tolerance supplied.');
-    sql = 'SELECT huc_12, first_hu_1, hr_name, ' +
-      'ST_AsGeoJSON(geom, ' + precision + ', 1) AS geometry ' +
-      'FROM hucs ' +
-      'WHERE ST_Intersects(ST_MakeEnvelope(' + query.bbox + ', 4326), geom);';
-  } else {
-    sql = 'SET search_path = "$user",public,topology;';
-    client.query(sql);
+  var conString = 'postgres://' + process.env.DB_USER + ':' + process.env.DB_PASS + '@localhost/ca_features';
+  pg.connect(conString, function(err, client, done) {
+    if(err) {
+      return console.error('error fetching client from pool', err);
+    }
 
-    tolerance = parseFloat(query.tolerance);
-    console.log('tolerance: ', tolerance);
-    sql = 'SELECT huc_12, first_hu_1, hr_name, ' +
-      'ST_AsGeoJSON(ST_Simplify(topogeom, ' + tolerance + '), ' + precision + ', 1) AS geometry ' +
-      'FROM hucs ' +
-      'WHERE ST_Intersects(ST_MakeEnvelope(' + query.bbox + ', 4326), geom);';
-  }
-
-  client.query(sql, function(err, result) {
-    result.rows.forEach(function(feature){
-
-      var f = {
-        "type": "Feature",
-        "geometry": JSON.parse(feature.geometry),
-        "properties": {
-          "huc_12": feature.huc_12,
-          "first_hu_1": feature.first_hu_1,
-          "hr_name": feature.hr_name
+    var sql;
+    if (query.tolerance === undefined) {
+      console.log('no tolerance supplied.');
+      sql = 'SELECT huc_12, first_hu_1, hr_name, ' +
+        'ST_AsGeoJSON(geom, ' + precision + ', 1) AS geometry ' +
+        'FROM hucs ' +
+        'WHERE ST_Intersects(ST_MakeEnvelope(' + query.bbox + ', 4326), geom);';
+    } else {
+      sql = 'SET search_path = "$user",public,topology;';
+      client.query(sql, function(err, result) {
+        done();
+        if(err) {
+          return console.error('error setting search path', err);
         }
-      };
-      fc.features.push(f);
+      });
+
+      tolerance = parseFloat(query.tolerance);
+      console.log('tolerance: ', tolerance);
+      sql = 'SELECT huc_12, first_hu_1, hr_name, ' +
+        'ST_AsGeoJSON(ST_Simplify(topogeom, ' + tolerance + '), ' + precision + ', 1) AS geometry ' +
+        'FROM hucs ' +
+        'WHERE ST_Intersects(ST_MakeEnvelope(' + query.bbox + ', 4326), geom);';
+    }
+
+    client.query(sql, function(err, result) {
+      done();
+
+      if(err) {
+        return console.error('error running query', err);
+      }
+
+      result.rows.forEach(function(feature){
+        var f = {
+          "type": "Feature",
+          "geometry": JSON.parse(feature.geometry),
+          "properties": {
+            "huc_12": feature.huc_12,
+            "first_hu_1": feature.first_hu_1,
+            "hr_name": feature.hr_name
+          }
+        };
+        fc.features.push(f);
+      });
+
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.type('application/json');
+      res.send(fc);
     });
 
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.type('application/json');
-    res.send(fc);
   });
 
 }
